@@ -135,12 +135,31 @@
   []
   (finish-element 'testsuite true))
 
+(defn- ste-file-and-line [^StackTraceElement s]
+  (if s
+    {:file (.getFileName s) :line (.getLineNumber s)}
+    {:file nil :line nil}))
+
+(defn- file-and-line
+  ([^Throwable exception]
+   (if-let [test-var (first clojure.test/*testing-vars*)]
+     (let [test-var-class-name (.getName (.getClass ^Object (:test (meta test-var))))]
+       (->> (.getStackTrace exception)
+            (filter #(.startsWith (.getClassName ^StackTraceElement %) test-var-class-name))
+            first
+            ste-file-and-line))
+     (file-and-line exception 0)))
+  ([^Throwable exception depth]
+   (let [stacktrace (.getStackTrace exception)]
+     (ste-file-and-line (when (< depth (count stacktrace))
+                          (nth stacktrace depth))))))
+
 (defn message-el
   [tag message expected-str actual-str]
   (indent)
   (start-element tag false (if message {:message message} {}))
   (element-content
-   (let [[file line] (t/file-position 5)
+   (let [{:keys [file line]} (file-and-line (Throwable.))
          detail (apply str (interpose
                             "\n"
                             [(str "expected: " expected-str)
